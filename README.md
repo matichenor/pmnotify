@@ -1,7 +1,7 @@
 # pmnotify
 
 ## Descrition
-A simple script that scans public github repos for newly raised issues.  Posts a message to slack for all newly created issues.
+A simple script that scans public github repos for new issues.  Posts a message to slack for all newly created issues.
 
 ## Configuration
 
