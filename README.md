@@ -6,8 +6,8 @@ A simple script that scans public github repos for new issues.  Posts a message 
 ## Configuration
 
 **Environment Variables**
-Define `GITHUB_TOKEN` as a personal github auth token
-Define `SLACK_WEBHOOK_URL` as a slack webhook url
+- Define `GITHUB_TOKEN` as a personal github auth token
+- Define `SLACK_WEBHOOK_URL` as a slack webhook url
 
 ## Todo
 * Make repo input handler more generic
