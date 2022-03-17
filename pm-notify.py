@@ -4,10 +4,12 @@ import sys
 import sqlite3
 import requests
 import time
+import logging
 
 # Constants
 ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
 ENV_SLACK_WEBHOOK_URL = "SLACK_WEBHOOK_URL"
+EMPLOYEE_ORG_NAME = "polygon-io"
 
 class NotifyDb:
     def __init_tables( self ):
@@ -103,7 +105,10 @@ class GithubIngestor:
             latest_time_str = latest_time.isoformat()
             self.__db.update_lastseen( repo_name, latest_time_str)
 
-
+    # get_slack_message_from_issue
+    #
+    # Convert an issue into a slack notification message
+    #
     def get_slack_message_from_issue( self, issue, repo_name):
         # I declare these variables not because I need to, but because I choose to.
         #   Brevity be damned!
@@ -112,7 +117,18 @@ class GithubIngestor:
         issue_creator = issue.user.login
         body = issue.body
 
-        slack_text = ":github_octocat: *New issue in {0} raised by {1}*\{2}\n{3}".format(repo_name, issue_creator, title, issue_url)
+        # Check if a user is an employee or external
+        is_employee = False
+        try:
+            org_check_resp = issue.user.get_organization_membership(EMPLOYEE_ORG_NAME)
+            is_employee = True
+        except Exception as e:
+            logging.debug("Determined that {0} is not an {1} employee".format(issue_creator,EMPLOYEE_ORG_NAME))
+
+        if is_employee:
+            slack_text = ":github_octocat: New internal issue {0} raised by employee {1}\n{2}\n{3}".format(repo_name, issue_creator, title, issue_url)
+        else:
+            slack_text = ":person_in_tuxedo: New customer issue in {0} raised by *{1}*\n{2}\n{3}".format(repo_name, issue_creator, title, issue_url)
 
         return slack_text
 
