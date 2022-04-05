@@ -5,11 +5,13 @@ import sqlite3
 import requests
 import time
 import logging
+from datetime import datetime
 
 # Constants
 ENV_GITHUB_TOKEN = "GITHUB_TOKEN"
 ENV_SLACK_WEBHOOK_URL = "SLACK_WEBHOOK_URL"
 EMPLOYEE_ORG_NAME = "polygon-io"
+SLACK_CHANNEL_NAME = "#product-notifications"
 
 class NotifyDb:
     def __init_tables( self ):
@@ -153,15 +155,43 @@ class GithubIngestor:
         return repos
 
 class SlackBot:
-    def __init__ ( self, slack_websocket_url ):
+    def __init__ ( self, slack_websocket_url, db ):
         self.__slack_websocket_url = slack_websocket_url
+        self.__db = db
+        self.__channel_name = SLACK_CHANNEL_NAME
 
-    def post_message_to_channel( self,  message ):
+    def update_last_post_time( self, appendix="" ):
+        timestamp = datetime.now().strftime("%Y%m%d")
+        self.__db.update_lastseen( self.__channel_name + appendix, timestamp)
+
+    def get_last_post_time(self, appendix=""):
+        return self.__db.get_lastseen(self.__channel_name + appendix)
+    
+    def is_last_post_within_24h(self, appendix=""):
+        last_date_str = self.get_last_post_time(appendix)
+        now_date_str = timestamp = datetime.now().strftime("%Y%m%d")
+        try:
+            diff = int(now_date_str) - int(last_date_str)
+        except Exception as e:
+            print("Failed to deterimine if a message was posted in the past 24h.  We're gonna assume no.")
+            return False
+        return diff <= 0
+
+    def post_daily_message(self, message, appendix):
+        if self.is_last_post_within_24h(appendix):
+            print("Skipping status message [[{0}]] because we already posted on in the last 24h".format(message))
+            return    
+        self.post_message_to_channel(message, appendix)
+
+    def post_message_to_channel( self,  message, appendix="" ):
         slack_headers = {'Content-type': 'application/json'}
         slack_post_data = {'text': message}
 
         # Todo - error handling 
         r = requests.post(self.__slack_websocket_url, json=slack_post_data, headers=slack_headers)
+
+        # Update the db with the last time we sent a message.  We may want to rate limit our messages using this data.
+        self.update_last_post_time(appendix)
 
 
 # Initialize a local sqlitedb 
@@ -172,7 +202,7 @@ slack_webhook_url = os.environ.get(ENV_SLACK_WEBHOOK_URL)
 if slack_webhook_url is None:
     print("Error! Missing required environment variable {0}".format(ENV_SLACK_WEBHOOK_URL))
     sys.exit()
-slack = SlackBot(slack_webhook_url)
+slack = SlackBot(slack_webhook_url, db)
 
 # Fetch a list of all public repos from githhub
 github_ingestor = GithubIngestor(db)
@@ -194,6 +224,6 @@ for repo in repos:
 
 # Post a slack message confirm the job ran and summarizing results.     
 job_done_message = "Finished checking {0} github repos for new issues. {1}/{2} repos contained no new issues.".format(repos.totalCount, len(no_update_repos), repos.totalCount)
-slack.post_message_to_channel(job_done_message)
+slack.post_daily_message(job_done_message, "job_done")
 
 # So long, farewell, auf wiedersehen, good night!
